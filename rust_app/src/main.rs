@@ -11,7 +11,9 @@ struct Request {
 
 #[derive(Deserialize)]
 struct RequestBody {
-    name: Option<String>,
+    first_name: Option<String>,
+    last_name: Option<String>,
+    age: i8,
 }
 
 #[derive(Serialize)]
@@ -22,24 +24,31 @@ struct Response {
     headers: serde_json::Value,
 }
 
-fn name_to_greeting(name: &str) -> String {
-    format!("Hello {}", name)
+fn name_to_greeting(first_name: &str, last_name: &str, age: i8) -> String {
+    format!("Hello, {} {}! You are {} years old.", first_name, last_name, age)
 }
 
-async fn function_handler(event: LambdaEvent<Request>) -> Result<Response, Error> {
-    let name = event.payload.body
+async fn function_handler(mut event: LambdaEvent<Request>) -> Result<Response, Error> {
+    let first_name = event.payload.body
+        .as_ref()
         .and_then(|body| serde_json::from_str::<RequestBody>(&body).ok())
-        .and_then(|parsed_body| parsed_body.name)
+        .and_then(|parsed_body| parsed_body.first_name.clone())
         .unwrap_or_else(|| "Guest".to_string());
-
-    info!("Received request with name: {}", name);
+    let last_name = event.payload.body.as_mut()
+        .and_then(|body| serde_json::from_str::<RequestBody>(&body).ok())
+        .and_then(|parsed_body| parsed_body.last_name.clone())
+        .unwrap_or_else(|| "".to_string());
+    let age = event.payload.body.as_ref()
+        .and_then(|body| serde_json::from_str::<RequestBody>(&body).ok())
+        .and_then(|parsed_body| Some(parsed_body.age));
+    info!("Received request with name: {}", first_name);
     
-    let greeting = name_to_greeting(&name);
+    let greeting = name_to_greeting(&first_name, &last_name, age.unwrap_or(0));
     info!("Generated greeting: {}", greeting);
-    
+    let adult = age >= Some(18);
     let response = Response {
         status_code: 200,
-        body: json!({ "message": greeting }).to_string(),
+        body: json!({ "first_name": first_name, "last_name": last_name, "age": age, "adult": adult }).to_string(),
         headers: json!({
             "Content-Type": "application/json",
             "Access-Control-Allow-Origin": "*"
